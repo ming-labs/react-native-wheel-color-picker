@@ -337,6 +337,21 @@ module.exports = class ColorPicker extends Component {
 		this.wheelWidth = Math.min(width, height)
 		this.tryForceUpdate()
 	}
+	measureWheelSize = () => {
+		this.wheel.measureInWindow((x, y, width, height) => {
+			if (width == 0 && height == 0) {
+				this.measureWheelSize()
+				return
+			}
+			this.wheelMeasure = { x, y, width, height }
+			this.wheelSize = width
+			// this.panX.setOffset(-width/2)
+			// this.panY.setOffset(-width/2)
+			this.updateOnLayout(this.state.currentColor)
+			this.setState({ wheelOpacity: 1 })
+		})
+	}
+
 	onWheelLayout = (e) => {
 		/*
 		* const {x, y, width, height} = nativeEvent.layout
@@ -344,14 +359,7 @@ module.exports = class ColorPicker extends Component {
 		* x and y are the distances to its previous element
 		* but in measureInWindow they are relative to the window
 		*/
-		this.wheel.measureInWindow((x, y, width, height) => {
-			this.wheelMeasure = {x, y, width, height}
-			this.wheelSize = width
-			// this.panX.setOffset(-width/2)
-			// this.panY.setOffset(-width/2)
-			this.update(this.state.currentColor)
-			this.setState({wheelOpacity:1})
-		})
+		this.measureWheelSize()
 	}
 	onSliderLayout = (e) => {
 		this.slider.measureInWindow((x, y, width, height) => {
@@ -359,7 +367,7 @@ module.exports = class ColorPicker extends Component {
 			this.sliderLength = this.props.row ? height-width : width-height
 			// this.slideX.setOffset(-width/2)
 			// this.slideY.setOffset(-width/2)
-			this.update(this.state.currentColor)
+			this.updateOnLayout(this.state.currentColor)
 			this.setState({sliderOpacity:1})
 		})
 	}
@@ -465,6 +473,39 @@ module.exports = class ColorPicker extends Component {
 			this.slideY.setValue(range)
 		}
 	}
+
+	updateOnLayout = (color, who, max, force) => {
+		const isHex = /^#(([0-9a-f]{2}){3}|([0-9a-f]){3})$/i
+		if (!isHex.test(color)) color = '#ffffff'
+		color = expandColor(color);
+		const specific = (typeof who == 'string'), who_hs = (who=='hs'), who_v = (who=='v')
+		let {h, s, v} = (typeof color == 'string') ? hex2Hsv(color) : color, stt = {}
+		h = (who_hs||!specific) ? h : this.color.h
+		s = (who_hs && max) ? 100 : (who_hs && max===false) ? 0 : (who_hs||!specific) ? s : this.color.s
+		v = (who_v && max) ? 100 : (who_v && max===false) ? 0 : (who_v||!specific) ? v : this.color.v
+		const range = (100 - v) / 100 * this.sliderLength
+		const {left, top} = this.cartesian(h, s / 100)
+		const hsv = {h,s,v}
+		if(!specific||force) {
+			this.color = hsv
+			stt.hueSaturation = hsv2Hex(this.color.h,this.color.s,100)
+			// this.setState({hueSaturation: hsv2Hex(this.color.h,this.color.s,100)})
+		}
+		stt.currentColor = hsv2Hex(hsv)
+		this.setState(stt, x=>{ this.tryForceUpdate(); this.renderDiscs(); })
+		// this.setState({currentColor:hsv2Hex(hsv)}, x=>this.tryForceUpdate())
+		// this.props.onColorChange(hsv2Hex(hsv))
+		if(who_hs||!specific) {
+			this.panY.setValue(top)// - this.props.thumbSize / 2)
+			this.panX.setValue(left)// - this.props.thumbSize / 2)
+		}
+		if(who_v||!specific) {
+			this.slideX.setValue(range)
+			this.slideY.setValue(range)
+		}
+	}
+
+	
 	animate = (color, who, max, force) => {
 		color = expandColor(color);
 		const specific = (typeof who == 'string'), who_hs = (who=='hs'), who_v = (who=='v')
